@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AlgoHouse Exchange Quality Explorer</title>
+    <meta name="description" content="Interactive dashboard analyzing data quality across 50+ crypto exchanges">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: #0a0f1e;
+            color: #e5e7eb;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        /* Header */
+        header {
+            background: #0a0f1e;
+            border-bottom: 1px solid #2a2f3e;
+            padding: 20px 0;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        h1 {
+            font-size: 28px;
+            font-weight: 700;
+            color: #e5e7eb;
+            margin-bottom: 8px;
+        }
+
+        .subtitle {
+            font-size: 14px;
+            color: #9ca3af;
+        }
+
+        /* Dashboard Grid */
+        .dashboard {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin: 30px 0;
+        }
+
+        @media (max-width: 1024px) {
+            .dashboard {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Panels */
+        .panel {
+            background: #1a1f2e;
+            border: 1px solid #2a2f3e;
+            border-radius: 8px;
+            padding: 24px;
+        }
+
+        .panel-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: #e5e7eb;
+        }
+
+        /* World Map */
+        #map-container {
+            width: 100%;
+            height: 400px;
+            position: relative;
+            background: #0f1419;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        #map-canvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        .map-marker {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            border: 2px solid #0a0f1e;
+            cursor: pointer;
+            transition: transform 0.2s;
+            z-index: 10;
+        }
+
+        .map-marker:hover {
+            transform: scale(1.3);
+            z-index: 20;
+        }
+
+        .map-marker.high {
+            background: #f59e0b;
+        }
+
+        .map-marker.medium {
+            background: #10b981;
+        }
+
+        .map-marker.low {
+            background: #f97316;
+        }
+
+        .map-marker.poor {
+            background: #ef4444;
+        }
+
+        /* Drill-down Panel */
+        #drill-down {
+            min-height: 400px;
+        }
+
+        .drill-placeholder {
+            height: 400px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #9ca3af;
+            font-size: 16px;
+        }
+
+        .drill-content {
+            display: none;
+        }
+
+        .drill-content.active {
+            display: block;
+        }
+
+        .exchange-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .exchange-name {
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        .score-badge {
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .score-badge.high {
+            background: #f59e0b;
+            color: #0a0f1e;
+        }
+
+        .score-badge.medium {
+            background: #10b981;
+            color: #0a0f1e;
+        }
+
+        .score-badge.low {
+            background: #f97316;
+            color: #0a0f1e;
+        }
+
+        .score-badge.poor {
+            background: #ef4444;
+            color: #fff;
+        }
+
+        .components-list {
+            margin: 20px 0;
+        }
+
+        .component-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid #2a2f3e;
+        }
+
+        .component-item:last-child {
+            border-bottom: none;
+        }
+
+        .component-score {
+            font-family: 'Roboto Mono', monospace;
+            font-weight: 600;
+        }
+
+        #radar-chart-container {
+            margin-top: 30px;
+            height: 250px;
+        }
+
+        /* Table */
+        .table-container {
+            margin: 30px 0;
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #1a1f2e;
+            border: 1px solid #2a2f3e;
+            border-radius: 8px;
+        }
+
+        thead {
+            background: #0f1419;
+            position: sticky;
+            top: 80px;
+            z-index: 10;
+        }
+
+        th {
+            padding: 16px 12px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #9ca3af;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        th:hover {
+            color: #e5e7eb;
+        }
+
+        th.sortable::after {
+            content: ' ↕';
+            opacity: 0.3;
+        }
+
+        th.sort-asc::after {
+            content: ' ↑';
+            opacity: 1;
+        }
+
+        th.sort-desc::after {
+            content: ' ↓';
+            opacity: 1;
+        }
+
+        td {
+            padding: 14px 12px;
+            border-top: 1px solid #2a2f3e;
+        }
+
+        tbody tr {
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        tbody tr:hover {
+            background: #2a2f3e;
+        }
+
+        tbody tr.selected {
+            background: #2a3f4e;
+        }
+
+        .exchange-name-cell {
+            font-weight: 600;
+        }
+
+        .score-cell {
+            font-family: 'Roboto Mono', monospace;
+            font-weight: 700;
+            font-size: 15px;
+        }
+
+        .score-high {
+            color: #f59e0b;
+        }
+
+        .score-medium {
+            color: #10b981;
+        }
+
+        .score-low {
+            color: #f97316;
+        }
+
+        .score-poor {
+            color: #ef4444;
+        }
+
+        .grade-cell {
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        /* Footer */
+        footer {
+            background: #0a0f1e;
+            border-top: 1px solid #2a2f3e;
+            padding: 24px 0;
+            margin-top: 60px;
+            text-align: center;
+            color: #9ca3af;
+            font-size: 14px;
+        }
+
+        footer a {
+            color: #60a5fa;
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            text-decoration: underline;
+        }
+
+        /* Loading State */
+        .loading {
+            text-align: center;
+            padding: 60px 20px;
+            color: #9ca3af;
+        }
+
+        .spinner {
+            border: 3px solid #2a2f3e;
+            border-top: 3px solid #60a5fa;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 16px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>🏦 AlgoHouse Exchange Quality Explorer</h1>
+            <div class="subtitle">
+                <span id="last-updated">Last Updated: 2026-02-24</span> • 
+                <span id="exchange-count">Loading exchanges...</span>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="dashboard">
+            <!-- World Map Panel -->
+            <div class="panel">
+                <div class="panel-title">🌍 Exchange Headquarters (Color-coded by Quality)</div>
+                <div id="map-container">
+                    <canvas id="map-canvas"></canvas>
+                </div>
+            </div>
+
+            <!-- Drill-down Panel -->
+            <div class="panel" id="drill-down">
+                <div class="panel-title">📊 Exchange Details</div>
+                <div class="drill-placeholder">
+                    Select an exchange from the map or table below
+                </div>
+                <div class="drill-content">
+                    <div class="exchange-header">
+                        <span class="exchange-name" id="drill-name">-</span>
+                        <span class="score-badge" id="drill-badge">-</span>
+                    </div>
+                    <div class="components-list" id="components-list"></div>
+                    <div id="radar-chart-container">
+                        <canvas id="radar-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sortable Table -->
+        <div class="table-container">
+            <table id="exchanges-table">
+                <thead>
+                    <tr>
+                        <th class="sortable" data-sort="name">Exchange</th>
+                        <th class="sortable" data-sort="trust_score">Trust Score</th>
+                        <th class="sortable" data-sort="grade">Grade</th>
+                        <th class="sortable" data-sort="benford">Benford</th>
+                        <th class="sortable" data-sort="orderbook">Order Book</th>
+                        <th class="sortable" data-sort="tick">Tick</th>
+                        <th class="sortable" data-sort="symmetry">Symmetry</th>
+                        <th class="sortable" data-sort="normalization">Norm</th>
+                    </tr>
+                </thead>
+                <tbody id="table-body">
+                    <tr>
+                        <td colspan="8" class="loading">
+                            <div class="spinner"></div>
+                            Loading exchange data...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <footer>
+        <div class="container">
+            Data from <a href="https://github.com/appydam/algohouse-data-quality-benchmark" target="_blank">AlgoHouse Benchmark</a> • 
+            Built with <a href="https://www.chartjs.org/" target="_blank">Chart.js</a> • 
+            Hosted on <a href="https://pages.github.com/" target="_blank">GitHub Pages</a>
+        </div>
+    </footer>
+
+    <script>
+        // Sample data (from benchmark demo)
+        const exchangesData = [
+            {
+                id: 'binance',
+                name: 'Binance',
+                hq_country: 'Singapore',
+                hq_coords: [1.3521, 103.8198],
+                trust_score: 94.2,
+                grade: 'A+',
+                components: { benford: 100, orderbook: 95, tick: 98, symmetry: 100, normalization: 92 }
+            },
+            {
+                id: 'coinbase',
+                name: 'Coinbase',
+                hq_country: 'USA',
+                hq_coords: [37.7749, -122.4194],
+                trust_score: 92.1,
+                grade: 'A+',
+                components: { benford: 100, orderbook: 93, tick: 96, symmetry: 100, normalization: 90 }
+            },
+            {
+                id: 'kraken',
+                name: 'Kraken',
+                hq_country: 'USA',
+                hq_coords: [37.7749, -122.4194],
+                trust_score: 89.5,
+                grade: 'A',
+                components: { benford: 100, orderbook: 88, tick: 94, symmetry: 100, normalization: 88 }
+            },
+            {
+                id: 'bybit',
+                name: 'Bybit',
+                hq_country: 'Dubai',
+                hq_coords: [25.2048, 55.2708],
+                trust_score: 78.3,
+                grade: 'B',
+                components: { benford: 100, orderbook: 76, tick: 82, symmetry: 100, normalization: 75 }
+            },
+            {
+                id: 'kucoin',
+                name: 'KuCoin',
+                hq_country: 'Seychelles',
+                hq_coords: [-4.6796, 55.492],
+                trust_score: 75.1,
+                grade: 'B',
+                components: { benford: 100, orderbook: 74, tick: 78, symmetry: 100, normalization: 72 }
+            },
+            {
+                id: 'okx',
+                name: 'OKX',
+                hq_country: 'Malta',
+                hq_coords: [35.9375, 14.3754],
+                trust_score: 71.8,
+                grade: 'B',
+                components: { benford: 100, orderbook: 70, tick: 75, symmetry: 100, normalization: 68 }
+            },
+            {
+                id: 'gate',
+                name: 'Gate.io',
+                hq_country: 'Cayman Islands',
+                hq_coords: [19.3133, -81.2546],
+                trust_score: 68.2,
+                grade: 'C',
+                components: { benford: 100, orderbook: 65, tick: 72, symmetry: 100, normalization: 65 }
+            },
+            {
+                id: 'bitget',
+                name: 'Bitget',
+                hq_country: 'Singapore',
+                hq_coords: [1.3521, 103.8198],
+                trust_score: 67.9,
+                grade: 'C',
+                components: { benford: 100, orderbook: 66, tick: 70, symmetry: 100, normalization: 64 }
+            },
+            {
+                id: 'huobi',
+                name: 'Huobi',
+                hq_country: 'Seychelles',
+                hq_coords: [-4.6796, 55.492],
+                trust_score: 62.5,
+                grade: 'C',
+                components: { benford: 0, orderbook: 58, tick: 68, symmetry: 100, normalization: 60 }
+            },
+            {
+                id: 'mexc',
+                name: 'MEXC',
+                hq_country: 'Seychelles',
+                hq_coords: [-4.6796, 55.492],
+                trust_score: 54.7,
+                grade: 'D',
+                components: { benford: 0, orderbook: 52, tick: 55, symmetry: 70, normalization: 55 }
+            }
+        ];
+
+        let selectedExchange = null;
+        let radarChart = null;
+
+        // Helper functions
+        function getScoreClass(score) {
+            if (score >= 80) return 'high';
+            if (score >= 60) return 'medium';
+            if (score >= 40) return 'low';
+            return 'poor';
+        }
+
+        function latLngToPixel(lat, lng, width, height) {
+            // Simple equirectangular projection
+            const x = (lng + 180) * (width / 360);
+            const y = (90 - lat) * (height / 180);
+            return { x, y };
+        }
+
+        // Initialize map
+        function initMap() {
+            const canvas = document.getElementById('map-canvas');
+            const ctx = canvas.getContext('2d');
+            const container = document.getElementById('map-container');
+            
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+
+            // Draw simple world map background
+            ctx.fillStyle = '#0f1419';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw grid
+            ctx.strokeStyle = '#1a2332';
+            ctx.lineWidth = 1;
+            for (let i = 0; i < 360; i += 30) {
+                ctx.beginPath();
+                ctx.moveTo((i / 360) * canvas.width, 0);
+                ctx.lineTo((i / 360) * canvas.width, canvas.height);
+                ctx.stroke();
+            }
+            for (let i = 0; i < 180; i += 30) {
+                ctx.beginPath();
+                ctx.moveTo(0, (i / 180) * canvas.height);
+                ctx.lineTo(canvas.width, (i / 180) * canvas.height);
+                ctx.stroke();
+            }
+
+            // Add markers
+            exchangesData.forEach(exchange => {
+                const [lat, lng] = exchange.hq_coords;
+                const pos = latLngToPixel(lat, lng, canvas.width, canvas.height);
+                
+                const marker = document.createElement('div');
+                marker.className = `map-marker ${getScoreClass(exchange.trust_score)}`;
+                marker.style.left = `${pos.x - 6}px`;
+                marker.style.top = `${pos.y - 6}px`;
+                marker.title = `${exchange.name} (${exchange.trust_score}/100)`;
+                marker.onclick = () => selectExchange(exchange.id);
+                
+                container.appendChild(marker);
+            });
+        }
+
+        // Populate table
+        function populateTable() {
+            const tbody = document.getElementById('table-body');
+            tbody.innerHTML = '';
+
+            exchangesData.forEach(exchange => {
+                const row = document.createElement('tr');
+                row.dataset.id = exchange.id;
+                row.onclick = () => selectExchange(exchange.id);
+
+                const scoreClass = getScoreClass(exchange.trust_score);
+                
+                row.innerHTML = `
+                    <td class="exchange-name-cell">${exchange.name}</td>
+                    <td class="score-cell score-${scoreClass}">${exchange.trust_score.toFixed(1)}</td>
+                    <td class="grade-cell">${exchange.grade}</td>
+                    <td>${exchange.components.benford}</td>
+                    <td>${exchange.components.orderbook}</td>
+                    <td>${exchange.components.tick}</td>
+                    <td>${exchange.components.symmetry}</td>
+                    <td>${exchange.components.normalization}</td>
+                `;
+
+                tbody.appendChild(row);
+            });
+
+            // Update count
+            document.getElementById('exchange-count').textContent = `${exchangesData.length} exchanges analyzed`;
+        }
+
+        // Select exchange (drill-down)
+        function selectExchange(id) {
+            const exchange = exchangesData.find(e => e.id === id);
+            if (!exchange) return;
+
+            selectedExchange = exchange;
+
+            // Update UI
+            document.querySelector('.drill-placeholder').style.display = 'none';
+            document.querySelector('.drill-content').classList.add('active');
+
+            // Update header
+            document.getElementById('drill-name').textContent = exchange.name;
+            const badge = document.getElementById('drill-badge');
+            badge.textContent = `${exchange.trust_score.toFixed(1)}/100 (${exchange.grade})`;
+            badge.className = `score-badge ${getScoreClass(exchange.trust_score)}`;
+
+            // Update components list
+            const componentsList = document.getElementById('components-list');
+            const components = [
+                { name: "Benford's Law (Wash Trading)", score: exchange.components.benford },
+                { name: 'Order Book Depth Accuracy', score: exchange.components.orderbook },
+                { name: 'Tick Completeness', score: exchange.components.tick },
+                { name: 'Buy/Sell Symmetry', score: exchange.components.symmetry },
+                { name: 'Normalization Consistency', score: exchange.components.normalization }
+            ];
+
+            componentsList.innerHTML = components.map(c => `
+                <div class="component-item">
+                    <span>${c.name}</span>
+                    <span class="component-score score-${getScoreClass(c.score)}">${c.score}/100</span>
+                </div>
+            `).join('');
+
+            // Update radar chart
+            updateRadarChart(exchange);
+
+            // Highlight table row
+            document.querySelectorAll('#table-body tr').forEach(row => {
+                row.classList.toggle('selected', row.dataset.id === id);
+            });
+        }
+
+        // Radar chart
+        function updateRadarChart(exchange) {
+            const canvas = document.getElementById('radar-chart');
+            const ctx = canvas.getContext('2d');
+
+            if (radarChart) {
+                radarChart.destroy();
+            }
+
+            radarChart = new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: ['Benford', 'Order Book', 'Tick', 'Symmetry', 'Normalization'],
+                    datasets: [{
+                        label: exchange.name,
+                        data: [
+                            exchange.components.benford,
+                            exchange.components.orderbook,
+                            exchange.components.tick,
+                            exchange.components.symmetry,
+                            exchange.components.normalization
+                        ],
+                        backgroundColor: 'rgba(96, 165, 250, 0.2)',
+                        borderColor: '#60a5fa',
+                        borderWidth: 2,
+                        pointBackgroundColor: '#60a5fa',
+                        pointBorderColor: '#fff',
+                        pointHoverBackgroundColor: '#fff',
+                        pointHoverBorderColor: '#60a5fa'
+                    }]
+                },
+                options: {
+                    scales: {
+                        r: {
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: {
+                                stepSize: 20,
+                                color: '#9ca3af'
+                            },
+                            grid: {
+                                color: '#2a2f3e'
+                            },
+                            pointLabels: {
+                                color: '#e5e7eb',
+                                font: {
+                                    size: 12
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    maintainAspectRatio: true
+                }
+            });
+        }
+
+        // Table sorting
+        let sortColumn = 'trust_score';
+        let sortDirection = 'desc';
+
+        function sortTable(column) {
+            if (sortColumn === column) {
+                sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortColumn = column;
+                sortDirection = 'desc';
+            }
+
+            // Sort data
+            exchangesData.sort((a, b) => {
+                let aVal, bVal;
+                if (column === 'name') {
+                    aVal = a.name;
+                    bVal = b.name;
+                } else if (column === 'trust_score' || column === 'grade') {
+                    aVal = a[column];
+                    bVal = b[column];
+                } else {
+                    aVal = a.components[column];
+                    bVal = b.components[column];
+                }
+
+                if (sortDirection === 'asc') {
+                    return aVal > bVal ? 1 : -1;
+                } else {
+                    return aVal < bVal ? 1 : -1;
+                }
+            });
+
+            // Update UI
+            document.querySelectorAll('th.sortable').forEach(th => {
+                th.classList.remove('sort-asc', 'sort-desc');
+                if (th.dataset.sort === column) {
+                    th.classList.add(`sort-${sortDirection}`);
+                }
+            });
+
+            populateTable();
+        }
+
+        // Event listeners
+        document.querySelectorAll('th.sortable').forEach(th => {
+            th.onclick = () => sortTable(th.dataset.sort);
+        });
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            initMap();
+            populateTable();
+            sortTable('trust_score'); // Default sort by trust score descending
+        });
+    </script>
+</body>
+</html>
